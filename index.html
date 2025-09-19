@@ -1,0 +1,629 @@
+<!-- ===========================
+     PART 1 — HTML + Tailwind UI
+     (Paste this at top of index.html)
+     After this:
+       - Paste PART 2 (Full ABI) where indicated
+       - Paste PART 3 (JS logic) where indicated
+     =========================== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Staking DApp — Polygon</title>
+
+  <!-- ethers.js + tailwind -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Minimal page styling tweaks -->
+  <style>
+    /* keep fonts tidy on mobile */
+    body { -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", "Segoe UI Mono", monospace; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-gray-100 to-gray-300 flex items-center justify-center p-4">
+
+  <div class="w-full max-w-4xl space-y-6">
+
+    <!-- Top header -->
+    <header class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-extrabold text-gray-800">Polygon Staking — Referral DApp</h1>
+        <p class="text-sm text-gray-600 mt-1">Stake, claim rewards, withdraw principal & track referrals (mobile-first)</p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <div id="networkBadge" class="hidden md:inline-block px-3 py-1 rounded-full bg-yellow-100 text-yellow-800 text-sm mono">Polygon</div>
+        <button id="connectBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg shadow-sm">Connect Wallet</button>
+      </div>
+    </header>
+
+    <!-- Main grid -->
+    <main class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+      <!-- LEFT: Big reward box + quick actions -->
+      <section class="md:col-span-1 space-y-4">
+        <div class="bg-white p-4 rounded-2xl shadow">
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Live Pending Rewards</p>
+              <h2 id="liveReward" class="text-3xl font-bold text-indigo-600">0.00</h2>
+              <p id="liveRewardSub" class="text-xs text-gray-400 mt-1">updates every second</p>
+            </div>
+            <div class="w-20 h-20 bg-indigo-50 rounded-lg flex items-center justify-center">
+              <svg class="w-10 h-10 text-indigo-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 1.343-3 3v6h6v-6c0-1.657-1.343-3-3-3z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4v4"></path>
+              </svg>
+            </div>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-2">
+            <button id="claimAllBtn" class="bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg">Claim Rewards</button>
+            <button id="unstakeAllBtn" class="bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg">Withdraw Principal</button>
+          </div>
+
+          <div class="mt-3 text-xs text-gray-500">
+            <p><strong>Fee:</strong> 2% withdrawal fee on rewards & principal. <span class="hidden md:inline">Referral bonus paid instantly (no fee).</span></p>
+          </div>
+        </div>
+
+        <!-- Referral summary -->
+        <div class="bg-white p-4 rounded-2xl shadow space-y-2">
+          <h3 class="font-semibold text-gray-700">Referral Summary</h3>
+          <div class="flex items-center justify-between">
+            <div>
+              <p class="text-sm text-gray-500">Referees</p>
+              <p id="refCount" class="text-xl font-bold">0</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">Referral Rewards</p>
+              <p id="refRewards" class="text-xl font-bold text-amber-600">0.00</p>
+            </div>
+          </div>
+          <div class="text-xs text-gray-400">Referral bonuses sent instantly to referrer’s wallet.</div>
+        </div>
+
+        <!-- Small status box -->
+        <div id="statusBox" class="bg-white p-3 rounded-lg text-sm text-center text-gray-700 shadow mono">Status: Idle</div>
+      </section>
+
+      <!-- MIDDLE: Stake form + history -->
+      <section class="md:col-span-1 space-y-4">
+        <div class="bg-white p-4 rounded-2xl shadow space-y-3">
+          <h3 class="font-semibold text-gray-700">Stake Tokens</h3>
+          <input id="stakeInput" type="number" step="any" placeholder="Amount (token decimals applied)" class="w-full border p-3 rounded-lg" />
+          <input id="refInput" type="text" placeholder="Referrer address (optional)" class="w-full border p-3 rounded-lg" />
+          <button id="stakeBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg">🚀 Approve & Stake</button>
+
+          <div class="mt-3 text-xs text-gray-500">
+            Min/Max stake enforced by contract. You will be asked to confirm approve if allowance is insufficient.
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-2xl shadow">
+          <h3 class="font-semibold text-gray-700 mb-2">Reward Withdrawal History</h3>
+          <ul id="historyList" class="text-sm space-y-2 text-gray-600">
+            <!-- JS will append li items -->
+          </ul>
+          <div class="text-xs text-gray-400 mt-2">Recent reward claims appear here.</div>
+        </div>
+      </section>
+
+      <!-- RIGHT: Stakes list (expandable rows) -->
+      <section class="md:col-span-1">
+        <div class="bg-white p-4 rounded-2xl shadow space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-gray-700">My Stakes</h3>
+            <div class="text-xs text-gray-400">Index-wise</div>
+          </div>
+
+          <div id="stakesContainer" class="space-y-3">
+            <!-- per-stake card template appended by JS -->
+            <div class="text-sm text-gray-400">No stakes loaded. Connect wallet to view.</div>
+          </div>
+
+          <div class="mt-3 text-xs text-gray-500">
+            Click a stake to expand and show pending reward, time remaining and action buttons (claim / withdraw).
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="text-center text-xs text-gray-500 mt-4">
+      Built for Polygon • Make sure MetaMask network is set to Polygon Mainnet
+    </footer>
+  </div>
+
+  <!-- ======== PART 2 placeholder: paste ABI array here ======== -->
+
+<!-- ======== PART 2 — Full Staking Contract ABI (paste here) ======== -->
+<script>
+const STAKING_ABI = [
+  {"inputs":[{"internalType":"address","name":"tokenAddress","type":"address"},{"internalType":"address","name":"_managementWallet","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"Funded","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},
+  {"anonymous":false,"inputs":[],"name":"Paused","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"stakeIndex","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"}],"name":"PrincipalWithdrawn","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"referrer","type":"address"},{"indexed":true,"internalType":"address","name":"referee","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"ReferralPaid","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"tokenAddress","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"RescueTokens","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amountNet","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"fee","type":"uint256"}],"name":"RewardClaimed","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":true,"internalType":"uint256","name":"stakeIndex","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"address","name":"referrer","type":"address"}],"name":"Staked","type":"event"},
+  {"anonymous":false,"inputs":[],"name":"Unpaused","type":"event"},
+  {"inputs":[],"name":"BPS_DENOM","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"MAX_STAKE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"MIN_STAKE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"REFERRAL_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"STAKE_DURATION","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"TOTAL_REWARD_MULTIPLIER","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"WITHDRAWAL_FEE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"availableBalanceForOperations","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256[]","name":"indices","type":"uint256[]"}],"name":"claimStakingRewards","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"fund","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"index","type":"uint256"}],"name":"getStake","outputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"startTime","type":"uint256"},{"internalType":"uint256","name":"claimed","type":"uint256"},{"internalType":"bool","name":"principalWithdrawn","type":"bool"},{"internalType":"uint256","name":"totalReward","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"addr","type":"address"}],"name":"isReferrerEligible","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"managementWallet","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"pause","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"paused","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"index","type":"uint256"}],"name":"pendingRewardForStake","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"refereeUsed","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"refereesCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"refereesOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"referrerOf","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"tokenAddress","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"rescueERC20","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"newWallet","type":"address"}],"name":"setManagementWallet","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"stakeCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"}],"name":"stakeTokens","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"stakes","outputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"startTime","type":"uint256"},{"internalType":"uint256","name":"claimed","type":"uint256"},{"internalType":"bool","name":"principalWithdrawn","type":"bool"},{"internalType":"uint256","name":"totalReward","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"token","outputs":[{"internalType":"contract IERC20","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"totalPendingRewards","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[],"name":"totalRewardLiability","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"unpause","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"uint256[]","name":"indices","type":"uint256[]"}],"name":"withdrawPrincipal","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[],"name":"withdrawReferralRewards","outputs":[],"stateMutability":"pure","type":"function"}
+];
+</script>
+<!-- ======== END PART 2 ======== -->
+
+  
+  <!-- Paste PART 2 (Full ABI JSON) right after this comment. -->
+
+  <!-- ======== PART 3 placeholder: paste JS logic here ======== -->
+<!-- ======== PART 3 — JS Logic (paste here) ======== -->
+<script>
+(async function () {
+  // --- Config ---
+  const STAKING_ADDRESS = "0x9fd473975cecd4587d78eb71f4498dde778c4b83";
+  const TOKEN_ADDRESS = "0x23b7a4c2ec9d742b5b1698149e812ca1e10d3e73";
+
+  // Minimal token ABI for ERC20 interactions we need
+  const TOKEN_ABI = [
+    "function approve(address spender, uint256 amount) external returns (bool)",
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "function decimals() view returns (uint8)",
+    "function balanceOf(address account) view returns (uint256)"
+  ];
+
+  // We'll use the STAKING_ABI variable you pasted in Part 2
+  if (typeof STAKING_ABI === "undefined") {
+    document.getElementById("statusBox").innerText = "Error: STAKING_ABI not found. Paste Part 2 ABI.";
+    return;
+  }
+
+  let provider, signer, userAddress, stakingContract, tokenContract, tokenDecimals = 18;
+  const iface = new ethers.utils.Interface(STAKING_ABI);
+
+  // UI refs
+  const connectBtn = document.getElementById("connectBtn");
+  const stakeBtn = document.getElementById("stakeBtn");
+  const stakeInput = document.getElementById("stakeInput");
+  const refInput = document.getElementById("refInput");
+  const statusBox = document.getElementById("statusBox");
+  const liveRewardEl = document.getElementById("liveReward");
+  const liveRewardSub = document.getElementById("liveRewardSub");
+  const stakesContainer = document.getElementById("stakesContainer");
+  const historyList = document.getElementById("historyList");
+  const refCountEl = document.getElementById("refCount");
+  const refRewardsEl = document.getElementById("refRewards");
+  const claimAllBtn = document.getElementById("claimAllBtn");
+  const unstakeAllBtn = document.getElementById("unstakeAllBtn");
+
+  // local state
+  let stakeCount = 0;
+  let stakes = []; // array of { amount, startTime, claimed, principalWithdrawn, totalReward }
+  let pendingPerStake = []; // array of BigNumber
+  let totalPending = ethers.BigNumber.from(0);
+  let stakeDuration = null; // will fetch from contract
+  let refreshInterval = null;
+  let history = JSON.parse(localStorage.getItem("rewardHistory") || "[]");
+
+  // helper: nice number formatting with decimals
+  function formatToken(bn) {
+    try {
+      return ethers.utils.formatUnits(bn, tokenDecimals);
+    } catch (e) {
+      return bn.toString();
+    }
+  }
+  function formatTokenFixed(bn, digits=4) {
+    try {
+      return Number(ethers.utils.formatUnits(bn, tokenDecimals)).toFixed(digits);
+    } catch (e) {
+      return bn.toString();
+    }
+  }
+
+  // render history
+  function renderHistory() {
+    historyList.innerHTML = "";
+    if (!history.length) {
+      historyList.innerHTML = `<li class="text-gray-400">No reward claims yet.</li>`;
+      return;
+    }
+    history.slice().reverse().forEach(h => {
+      const li = document.createElement("li");
+      li.className = "px-2 py-1 bg-white rounded shadow-sm";
+      li.innerHTML = `<div class="flex justify-between"><div class="text-xs text-gray-600">${h.msg}</div><div class="text-xs text-gray-400 mono">${h.time}</div></div>`;
+      historyList.appendChild(li);
+    });
+  }
+
+  // append history item and persist
+  function pushHistory(msg) {
+    const item = { time: new Date().toLocaleString(), msg };
+    history.push(item);
+    localStorage.setItem("rewardHistory", JSON.stringify(history));
+    renderHistory();
+  }
+
+  // set status
+  function setStatus(txt) {
+    statusBox.innerText = "Status: " + txt;
+  }
+
+  // connect wallet
+  async function connectWallet() {
+    try {
+      if (!window.ethereum) throw new Error("MetaMask not found. Use MetaMask mobile in-app browser or WalletConnect-capable browser.");
+      await window.ethereum.request({ method: "eth_requestAccounts" });
+      provider = new ethers.providers.Web3Provider(window.ethereum);
+      signer = provider.getSigner();
+      userAddress = await signer.getAddress();
+      stakingContract = new ethers.Contract(STAKING_ADDRESS, STAKING_ABI, signer);
+      tokenContract = new ethers.Contract(TOKEN_ADDRESS, TOKEN_ABI, signer);
+
+      // fetch decimals
+      try { tokenDecimals = await tokenContract.decimals(); } catch (e) { tokenDecimals = 18; }
+
+      // fetch stakeDuration if present
+      try { stakeDuration = await stakingContract.STAKE_DURATION(); } catch (e) { stakeDuration = null; }
+
+      connectBtn.innerText = `${userAddress.slice(0,6)}...${userAddress.slice(-4)}`;
+      setStatus("Wallet connected");
+      renderHistory();
+
+      // initial load
+      await loadStakes();
+      startAutoRefresh();
+      await refreshReferralStats();
+    } catch (err) {
+      alert("Connect error: " + (err.message || err));
+      console.error(err);
+    }
+  }
+
+  // load all stakes for user
+  async function loadStakes() {
+    try {
+      stakeCount = (await stakingContract.stakeCount(userAddress)).toNumber();
+    } catch (err) {
+      // some contracts may revert if zero; guard
+      stakeCount = 0;
+    }
+    stakes = [];
+    pendingPerStake = [];
+    if (stakeCount === 0) {
+      stakesContainer.innerHTML = `<div class="text-sm text-gray-400">No stakes found.</div>`;
+      totalPending = ethers.BigNumber.from(0);
+      liveRewardEl.innerText = "0.00";
+      return;
+    }
+
+    // fetch each stake
+    const frag = document.createDocumentFragment();
+    stakesContainer.innerHTML = "";
+    for (let i = 0; i < stakeCount; ++i) {
+      let s;
+      try {
+        s = await stakingContract.getStake(userAddress, i);
+      } catch (err) {
+        console.warn("getStake error", i, err.message);
+        continue;
+      }
+      // normalize to BigNumber where needed
+      const stakeObj = {
+        index: i,
+        amount: ethers.BigNumber.from(s.amount.toString()),
+        startTime: ethers.BigNumber.from(s.startTime.toString()),
+        claimed: ethers.BigNumber.from(s.claimed.toString()),
+        principalWithdrawn: s.principalWithdrawn,
+        totalReward: ethers.BigNumber.from(s.totalReward.toString())
+      };
+      stakes.push(stakeObj);
+      pendingPerStake[i] = ethers.BigNumber.from(0);
+
+      // create stake card DOM
+      const card = document.createElement("div");
+      card.className = "bg-gray-50 p-3 rounded-lg shadow-sm";
+      card.id = `stake-card-${i}`;
+      card.innerHTML = `
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-sm text-gray-500">Stake #${i}</div>
+            <div class="font-semibold text-gray-800">${formatTokenFixed(stakeObj.amount,4)} <span class="text-xs text-gray-400">tokens</span></div>
+          </div>
+          <div class="text-right">
+            <div id="pending-${i}" class="text-indigo-600 font-bold">0.00</div>
+            <div id="time-${i}" class="text-xs text-gray-400">--</div>
+          </div>
+        </div>
+        <div class="mt-3 flex gap-2">
+          <button data-idx="${i}" class="claim-btn flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-lg text-sm">Claim</button>
+          <button data-idx="${i}" class="unstake-btn flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm">Unstake</button>
+        </div>
+      `;
+      frag.appendChild(card);
+    }
+    stakesContainer.appendChild(frag);
+
+    // add event listeners for claim and unstake buttons
+    document.querySelectorAll(".claim-btn").forEach(b => {
+      b.onclick = async (e) => {
+        const idx = Number(e.currentTarget.dataset.idx);
+        await claimIndices([idx]);
+      };
+    });
+    document.querySelectorAll(".unstake-btn").forEach(b => {
+      b.onclick = async (e) => {
+        const idx = Number(e.currentTarget.dataset.idx);
+        await withdrawIndices([idx]);
+      };
+    });
+
+    // compute initial pending values
+    await refreshPending();
+  }
+
+  // refresh pending per-stake and total
+  async function refreshPending() {
+    try {
+      let total = ethers.BigNumber.from(0);
+      for (let i = 0; i < stakes.length; ++i) {
+        try {
+          const p = await stakingContract.pendingRewardForStake(userAddress, i);
+          pendingPerStake[i] = ethers.BigNumber.from(p.toString());
+          total = total.add(pendingPerStake[i]);
+          // update DOM
+          const pendEl = document.getElementById(`pending-${i}`);
+          if (pendEl) pendEl.innerText = formatTokenFixed(pendingPerStake[i], 4);
+          // time remaining
+          const timeEl = document.getElementById(`time-${i}`);
+          if (timeEl) {
+            if (stakeDuration && stakes[i].startTime) {
+              const endTs = stakes[i].startTime.toNumber() + Number(stakeDuration.toString());
+              const remaining = endTs - Math.floor(Date.now()/1000);
+              timeEl.innerText = remaining > 0 ? formatSeconds(remaining) : "Unlocked";
+            } else {
+              timeEl.innerText = "—";
+            }
+          }
+        } catch (err) {
+          console.warn("pendingRewardForStake error", i, err.message);
+        }
+      }
+      totalPending = total;
+      liveRewardEl.innerText = formatTokenFixed(totalPending, 6);
+    } catch (err) {
+      console.error("refreshPending error", err);
+    }
+  }
+
+  // helper format seconds to friendly string
+  function formatSeconds(sec) {
+    sec = Number(sec);
+    if (sec <= 0) return "Unlocked";
+    const d = Math.floor(sec / 86400);
+    sec %= 86400;
+    const h = Math.floor(sec / 3600);
+    sec %= 3600;
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${m}m`;
+    if (m) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  // start auto-refresh every second
+  function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(async () => {
+      await refreshPending();
+    }, 1000);
+  }
+
+  // stake (approve if needed)
+  async function stakeAction() {
+    try {
+      setStatus("Preparing stake...");
+      const raw = stakeInput.value;
+      if (!raw || Number(raw) <= 0) { alert("Enter amount"); return; }
+      const decimals = tokenDecimals;
+      const amt = ethers.utils.parseUnits(raw.toString(), decimals);
+      // check allowance
+      const allowance = await tokenContract.allowance(userAddress, STAKING_ADDRESS);
+      if (allowance.lt(amt)) {
+        setStatus("Approving token...");
+        const tx = await tokenContract.approve(STAKING_ADDRESS, amt);
+        await tx.wait();
+      }
+      // stake
+      const ref = refInput.value && ethers.utils.isAddress(refInput.value) ? refInput.value : ethers.constants.AddressZero;
+      setStatus("Staking...");
+      const tx2 = await stakingContract.stakeTokens(amt, ref);
+      await tx2.wait();
+      setStatus("Stake successful");
+      pushHistory(`Staked ${raw} tokens`);
+      // reload
+      await loadStakes();
+      await refreshReferralStats();
+    } catch (err) {
+      alert("Stake error: " + (err.message || err));
+      console.error(err);
+      setStatus("Stake failed");
+    }
+  }
+
+  // claim specified indices (array)
+  async function claimIndices(indices) {
+    try {
+      setStatus("Claiming rewards...");
+      const tx = await stakingContract.claimStakingRewards(indices);
+      await tx.wait();
+      setStatus("Claim successful");
+      pushHistory(`Claimed rewards for indices: ${indices.join(",")}`);
+      await refreshPending();
+      await refreshReferralStats();
+    } catch (err) {
+      alert("Claim error: " + (err.message || err));
+      console.error(err);
+      setStatus("Claim failed");
+    }
+  }
+
+  // withdraw principal for indices
+  async function withdrawIndices(indices) {
+    try {
+      setStatus("Withdrawing principal...");
+      const tx = await stakingContract.withdrawPrincipal(indices);
+      await tx.wait();
+      setStatus("Withdraw successful");
+      pushHistory(`Withdrew principal indices: ${indices.join(",")}`);
+      await loadStakes();
+      await refreshPending();
+    } catch (err) {
+      alert("Withdraw error: " + (err.message || err));
+      console.error(err);
+      setStatus("Withdraw failed");
+    }
+  }
+
+  // claim all (indices with pending > 0)
+  async function claimAll() {
+    const idxs = [];
+    for (let i = 0; i < pendingPerStake.length; ++i) {
+      if (pendingPerStake[i].gt(0)) idxs.push(i);
+    }
+    if (!idxs.length) { alert("No rewards to claim"); return; }
+    await claimIndices(idxs);
+  }
+
+  // unstake all matured (those where remaining <= 0)
+  async function unstakeAll() {
+    if (!stakeDuration) {
+      alert("Contract stake duration not available — unstake all not supported.");
+      return;
+    }
+    const idxs = [];
+    const now = Math.floor(Date.now()/1000);
+    for (let i = 0; i < stakes.length; ++i) {
+      const endTs = stakes[i].startTime.toNumber() + Number(stakeDuration.toString());
+      if (now >= endTs && !stakes[i].principalWithdrawn) idxs.push(i);
+    }
+    if (!idxs.length) { alert("No matured stakes to withdraw"); return; }
+    await withdrawIndices(idxs);
+  }
+
+  // fetch referral stats: refereesCount and sum referral rewards by reading ReferralPaid events
+  async function refreshReferralStats() {
+    try {
+      // referees count (how many referees this user referred)
+      let refCount = 0;
+      try {
+        refCount = (await stakingContract.refereesCount(userAddress)).toNumber();
+      } catch (e) {
+        refCount = 0;
+      }
+      refCountEl.innerText = refCount;
+
+      // Now fetch ReferralPaid events to sum amounts where referrer == userAddress
+      // Event signature is ReferralPaid(address referrer, address referee, uint256 amount)
+      const topic = ethers.utils.id("ReferralPaid(address,address,uint256)");
+      const refTopic = ethers.utils.hexZeroPad(userAddress, 32);
+      const filter = {
+        address: STAKING_ADDRESS,
+        fromBlock: 0,
+        toBlock: "latest",
+        topics: [topic, refTopic]
+      };
+      let logs = [];
+      try {
+        logs = await provider.getLogs(filter);
+      } catch (e) {
+        console.warn("getLogs failed:", e.message);
+      }
+      let sum = ethers.BigNumber.from(0);
+      for (const l of logs) {
+        try {
+          const parsed = iface.parseLog(l);
+          const paidAmount = parsed.args.amount;
+          sum = sum.add(paidAmount);
+        } catch (e) {
+          // ignore parse errors
+        }
+      }
+      refRewardsEl.innerText = formatTokenFixed(sum, 6);
+    } catch (err) {
+      console.error("refreshReferralStats error", err);
+    }
+  }
+
+  // wire UI buttons
+  connectBtn.onclick = connectWallet;
+  stakeBtn.onclick = stakeAction;
+  claimAllBtn.onclick = claimAll;
+  unstakeAllBtn.onclick = unstakeAll;
+
+  // initial render
+  renderHistory();
+
+  // Expose refresh functions to global for debugging
+  window._stakingDebug = {
+    loadStakes,
+    refreshPending,
+    refreshReferralStats,
+    claimAll,
+    unstakeAll
+  };
+
+  // If already connected (MetaMask persists), try connect automatically
+  if (window.ethereum && window.ethereum.selectedAddress) {
+    try { await connectWallet(); } catch(e){ /* ignore */ }
+  }
+})();
+</script>
+<!-- ======== END PART 3 ======== -->
+
+
+  
+  <!-- Paste PART 3 (full JS logic using ethers.js) right before closing body tag. -->
+
+</body>
+</html>
